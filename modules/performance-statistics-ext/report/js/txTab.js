@@ -24,11 +24,13 @@ const TX_COLORS = {
 
 const txSearchCachesSelect = $('#txSearchCaches');
 const txSearchNodesSelect = $('#txSearchNodes');
+const txSearchNodesCPSelect = $('#txSearchCpNodes');
 const txCharts = $("#txCharts");
 
 function drawTxCharts() {
     var cacheId = txSearchCachesSelect.val();
     var nodeId = txSearchNodesSelect.val();
+    var cpNodeId = txSearchNodesCPSelect.val()
 
     txCharts.empty();
 
@@ -37,13 +39,10 @@ function drawTxCharts() {
 
         txCharts.append('<canvas class="my-4" id="' + txChartId + '" height="120""></canvas>');
 
-        let datasets = prepareTxDatasets(nodeId, cacheId, opName)
-
-        new Chart(document.getElementById(txChartId), {
+        let chart = new Chart(document.getElementById(txChartId), {
             type: 'line',
             data: {
-                datasets: prepareTxDatasets(nodeId, cacheId, opName),
-                labels: datasets[0].data.length > 0 ? undefined : [undefined]
+                datasets: prepareTxDatasets(nodeId, cacheId, opName)
             },
             options: {
                 scales: {
@@ -72,22 +71,61 @@ function drawTxCharts() {
                         display: true,
                         title: {
                             display: true,
-                            text: 'Сount'
+                            text: 'Сount of operations'
+                        },
+                        suggestedMin: 0,
+                        suggestedMax: 10
+                    },
+                    y1: {
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Сount of pages write throttle'
                         },
                         suggestedMin: 0,
                         suggestedMax: 10
                     }
                 },
                 plugins: {
+                    legend: {
+                        display: true,
+                        onClick: (e, legendItem, legend) => {
+                            let index = legendItem.datasetIndex;
+
+                            if (legendItem.text === LABELS.CHECKPOINT){
+                                if(legendItem.hidden)
+                                    chart.options.annotations = getCheckointsBoxes(cpNodeId, chart.scales.y.end)
+                                else
+                                    chart.options.annotations = []
+                            }
+
+                            let ci = legend.chart;
+
+                            let meta = ci.getDatasetMeta(index)
+
+                            meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null
+
+                            ci.update();
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (i) => getLabel(i),
+                        }
+                    },
                     title: {
                         display: true,
                         text: "Count of [" + opName + "]",
                         fontSize: 20
                     }
                 },
-                animation: false,
+                animation: false
             }
         })
+
+        chart.options.annotations = getCheckointsBoxes(cpNodeId, chart.scales.y.end)
+        chart.update()
     });
 
     txCharts.prepend('<canvas class="my-4" id="txHistogram" height="80""></canvas>');
@@ -177,6 +215,13 @@ function prepareTxDatasets(nodeId, cacheId, opName) {
 
     datasets.push(dataset);
 
+    let nodeIdCP = searchNodesCPsSelect.val()
+
+    if (nodeIdCP) {
+        datasets.push(checkpointDataset)
+        datasets.push(getPagesWriteThrottleDataset(nodeIdCP))
+    }
+
     return datasets;
 }
 
@@ -195,7 +240,8 @@ function buildTxHistogramBuckets() {
     return buckets;
 }
 
-buildSelectCaches(txSearchCachesSelect, drawTxCharts);
-buildSelectNodes(txSearchNodesSelect, drawTxCharts);
+buildSelectCaches(txSearchCachesSelect, drawTxCharts, 'All nodes');
+buildSelectNodes(txSearchNodesSelect, drawTxCharts, 'All nodes');
+buildSelectNodes(txSearchNodesCPSelect, drawTxCharts, 'All checkpoint nodes', true);
 
 drawTxCharts();
